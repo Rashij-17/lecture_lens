@@ -8,7 +8,7 @@ def transcribe_video(filepath: str) -> list[dict]:
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")
 
-    result = model.transcribe(filepath)
+    result = model.transcribe(filepath,fp16 = False)
 
     formatted_segments = []
     for segment in result["segments"]:

@@ -1,13 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 import VideoUploader from './VideoUploader';
+import LinkAnalyzer from './LinkAnalyzer';
 import VideoPlayer from './VideoPlayer';
 import PdfUploader from './PdfUploader';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ExploreLibrary from './components/ExploreLibrary';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './components/Login';
+import { db } from './firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 
-function App() {
+function AppContent() {
+  const { currentUser } = useAuth();
+
+  // ─── If not authenticated, show Login only ───
+  if (!currentUser) {
+    return <Login />;
+  }
+
+  return <Dashboard />;
+}
+
+function Dashboard() {
+  const { currentUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('workspace');
   const [transcriptionData, setTranscriptionData] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -23,9 +40,95 @@ function App() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [pdfSummary, setPdfSummary] = useState(null);
+  const [linkSummary, setLinkSummary] = useState(null);
+  const [linkTitle, setLinkTitle] = useState('');
   const chatEndRef = useRef(null);
 
+  // ─── Research Agent state ───
+  const [researchQuery, setResearchQuery] = useState('');
+  const [researchResult, setResearchResult] = useState(null);
+  const [isResearchLoading, setIsResearchLoading] = useState(false);
+  const [researchError, setResearchError] = useState('');
 
+  // ─── Study History & Recommendations state ───
+  const [studyHistory, setStudyHistory] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+
+
+
+  // ─── Load study history from Firestore on mount ───
+  const loadStudyHistory = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const histRef = collection(db, 'users', currentUser.uid, 'history');
+      const q = query(histRef, orderBy('createdAt', 'desc'), limit(20));
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setStudyHistory(items);
+
+      // Generate simple recommendations from history
+      const topics = items.map(item => item.topic).filter(Boolean);
+      const unique = [...new Set(topics)];
+      if (unique.length > 0) {
+        const recs = unique.slice(0, 3).map(topic => {
+          const relatedPrefixes = {
+            'video': 'Advanced concepts in',
+            'pdf': 'Deep dive into',
+          };
+          const matchingItem = items.find(i => i.topic === topic);
+          const prefix = relatedPrefixes[matchingItem?.type] || 'Explore more about';
+          return `${prefix} ${topic}`;
+        });
+        setRecommendations(recs);
+      }
+    } catch (err) {
+      console.error('Failed to load study history:', err);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    loadStudyHistory();
+  }, [loadStudyHistory]);
+
+  // ─── Save a study topic to Firestore ───
+  const saveStudyTopic = async (topic, type) => {
+    if (!currentUser || !topic) return;
+    try {
+      const histRef = collection(db, 'users', currentUser.uid, 'history');
+      await addDoc(histRef, {
+        topic,
+        type, // 'video' or 'pdf'
+        createdAt: serverTimestamp(),
+      });
+      loadStudyHistory(); // refresh the list
+    } catch (err) {
+      console.error('Failed to save study topic:', err);
+    }
+  };
+
+  // ─── Research Agent handler ───
+  const handleResearchSearch = async () => {
+    if (!researchQuery.trim()) return;
+    setIsResearchLoading(true);
+    setResearchResult(null);
+    setResearchError('');
+
+    try {
+      const res = await fetch('http://localhost:8000/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: researchQuery }),
+      });
+      if (!res.ok) throw new Error('Research request failed');
+      const data = await res.json();
+      setResearchResult(data.answer);
+    } catch (err) {
+      console.error(err);
+      setResearchError('Failed to fetch research results. Please try again.');
+    } finally {
+      setIsResearchLoading(false);
+    }
+  };
 
   // Auto-scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -46,6 +149,33 @@ function App() {
   const handleSuccess = (data, file) => {
     setTranscriptionData(data);
     setVideoUrl(URL.createObjectURL(file));
+    setLinkSummary(null);
+    setLinkTitle('');
+    // Save the filename as a study topic
+    const topicName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+    saveStudyTopic(topicName, 'video');
+  };
+
+  // ─── Link Analysis complete handler ───
+  const handleLinkAnalysisComplete = (data, sourceUrl) => {
+    // Map the response into the same shape as handleSuccess
+    // Ensure segments is always an array (handles empty/missing gracefully)
+    const segments = Array.isArray(data.segments) ? data.segments : [];
+    setTranscriptionData({ filename: data.title, segments });
+    setVideoUrl(null); // No local video file for link-based analysis
+    setLinkSummary(data.summary || null);
+    setLinkTitle(data.title || 'Link Analysis');
+    setPdfSummary(null);
+    setQuizData(null);
+    setFlashcardData(null);
+    setChatHistory([]);
+
+    // Scroll to top so the summary banner is immediately visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Save to Firestore history
+    const topicName = data.title || sourceUrl;
+    saveStudyTopic(topicName, 'link');
   };
 
   const handleJumpToTime = (startTime) => {
@@ -119,6 +249,18 @@ function App() {
       <div className="app-header">
         <h1 className="title">Lecture Lens</h1>
         <p className="subtitle">AI-Powered Video Transcription & Study Tools</p>
+        <button
+          className="logout-btn"
+          onClick={logout}
+          title="Sign out"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Logout
+        </button>
       </div>
 
       {/* ─── Navigation Toggle ─── */}
@@ -152,6 +294,11 @@ function App() {
       ) : !transcriptionData ? (
         /* ─── Upload Screen: Bento Grid ─── */
         <div className="upload-screen">
+          {/* 0. Link Analyzer — full-width row spanning both columns */}
+          <div className="upload-screen-full">
+            <LinkAnalyzer onAnalysisComplete={handleLinkAnalysisComplete} />
+          </div>
+
           {/* 1. Video Uploader Card */}
           <div>
             <h2 className="upload-section-title">Video Lecture</h2>
@@ -161,7 +308,10 @@ function App() {
           {/* 2. PDF Uploader Card */}
           <div>
             <h2 className="upload-section-title">PDF Document</h2>
-            <PdfUploader onSummaryReady={(summaryData) => setPdfSummary(summaryData)} />
+            <PdfUploader onSummaryReady={(summaryData) => {
+              setPdfSummary(summaryData);
+              saveStudyTopic('PDF Analysis', 'pdf');
+            }} />
           </div>
 
           {/* 3. Summary Box (spans full width) */}
@@ -189,16 +339,179 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* ─── 4. AI Research Assistant ─── */}
+          <div className="research-section">
+            <div className="research-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <h2 className="research-title">AI Research Assistant</h2>
+              <span className="research-badge">ArXiv</span>
+            </div>
+            <p className="research-subtitle">Search for scientific papers on any topic — powered by AI</p>
+
+            <div className="research-input-wrapper">
+              <svg className="research-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                className="research-input"
+                placeholder="e.g. quantum machine learning, attention mechanisms..."
+                value={researchQuery}
+                onChange={(e) => setResearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleResearchSearch()}
+                disabled={isResearchLoading}
+              />
+              <button
+                className="research-go-btn"
+                onClick={handleResearchSearch}
+                disabled={isResearchLoading || !researchQuery.trim()}
+              >
+                {isResearchLoading ? (
+                  <span className="btn-spinner" />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
+            {/* Loading state */}
+            {isResearchLoading && (
+              <div className="research-loading">
+                <div className="research-loading-icon">
+                  <span className="btn-spinner" />
+                </div>
+                <p>Agent is searching ArXiv for papers...</p>
+              </div>
+            )}
+
+            {/* Error state */}
+            {researchError && (
+              <p className="research-error">{researchError}</p>
+            )}
+
+            {/* Results */}
+            {researchResult && (
+              <div className="research-results">
+                <div className="research-results-header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                  Research Results
+                </div>
+                <div className="research-results-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {researchResult}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ─── 5. Recommended For You ─── */}
+          {recommendations.length > 0 && (
+            <div className="recommendations-section">
+              <div className="recommendations-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <h3 className="recommendations-title">Recommended For You</h3>
+              </div>
+              <div className="recommendations-list">
+                {recommendations.map((rec, i) => (
+                  <button
+                    key={i}
+                    className="recommendation-chip"
+                    onClick={() => {
+                      setResearchQuery(rec);
+                      // Auto-scroll to research section
+                      document.querySelector('.research-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="16" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                    {rec}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── 6. Recent Study History ─── */}
+          {studyHistory.length > 0 && (
+            <div className="history-section">
+              <div className="history-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <h3 className="history-title">Recent Study History</h3>
+              </div>
+              <div className="history-list">
+                {studyHistory.slice(0, 5).map((item) => (
+                  <div key={item.id} className="history-item">
+                    <span className={`history-type-badge ${item.type}`}>
+                      {item.type === 'video' ? '🎥' : item.type === 'link' ? '🔗' : '📄'}
+                    </span>
+                    <span className="history-topic">{item.topic}</span>
+                    <span className="history-time">
+                      {item.createdAt?.toDate?.() ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* ─── Workspace: Video Player + Transcript + Chat ─── */
         <>
+          {/* ─── Link AI Summary Banner ─── */}
+          {linkSummary && (
+            <div className="link-summary-banner" id="link-summary-banner">
+              <div className="link-summary-banner-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                </svg>
+                <span className="link-summary-banner-title">✨ {linkTitle || 'AI Summary'}</span>
+                <button className="link-summary-close-btn" onClick={() => setLinkSummary(null)}>Dismiss</button>
+              </div>
+              <div className="markdown-summary">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{linkSummary}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+          {/* ─── No summary fallback ─── */}
+          {!linkSummary && linkTitle && (
+            <div className="link-no-summary-banner">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>Transcription complete for <strong>{linkTitle}</strong>. Summary unavailable — check your API key or try a different video.</span>
+            </div>
+          )}
+
           <div className="workspace">
             {/* ─── Left Column: Player + Transcript ─── */}
             <div className="left-column">
 
-              {/* 1. The Video Player */}
-              <VideoPlayer videoUrl={videoUrl} seekTime={seekTime} />
+              {/* 1. The Video Player (hidden for link-based analysis) */}
+              {videoUrl && <VideoPlayer videoUrl={videoUrl} seekTime={seekTime} />}
 
               {/* 2. The Interactive Transcript */}
               <div className="transcript-panel">
@@ -475,6 +788,8 @@ function App() {
             onClick={() => {
               setTranscriptionData(null);
               setVideoUrl(null);
+              setLinkSummary(null);
+              setLinkTitle('');
               setQuizData(null);
               setFlashcardData(null);
               setSelectedAnswers({});
@@ -483,11 +798,20 @@ function App() {
               setChatInput('');
             }}
           >
-            ← Upload Another Video
+            ← Back to Upload
           </button>
         </>
       )}
     </div>
+  );
+}
+
+// ─── Root App: wraps everything in AuthProvider ───
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
