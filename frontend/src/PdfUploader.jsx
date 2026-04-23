@@ -3,14 +3,16 @@ import React, { useState } from 'react';
 const PdfUploader = ({ onSummaryReady }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const handleFile = async (file) => {
         if (!file || file.type !== 'application/pdf') {
-            alert('Please upload a valid PDF file.');
+            setError('Please upload a valid PDF file.');
             return;
         }
 
         setIsLoading(true);
+        setError('');
         const formData = new FormData();
         formData.append('file', file);
 
@@ -20,19 +22,23 @@ const PdfUploader = ({ onSummaryReady }) => {
                 body: formData,
             });
 
-            // Unmasking the backend error!
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || "Unknown Server Error");
+                // Handle 503 capacity errors with a friendly message
+                if (response.status === 503) {
+                    const errData = await response.json().catch(() => ({}));
+                    setError(errData.detail || "Google's AI servers are currently at max capacity. Please try again in a few minutes.");
+                    return;
+                }
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Unknown Server Error');
             }
 
             const data = await response.json();
             onSummaryReady(data.summary);
 
         } catch (error) {
-            console.error("Error summarizing PDF:", error);
-            // The alert will now show the REAL Python error!
-            alert(`Backend Error: ${error.message}`);
+            console.error('Error summarizing PDF:', error);
+            setError(`Error: ${error.message}`);
         } finally {
             setIsLoading(false);
         }
@@ -171,6 +177,25 @@ const PdfUploader = ({ onSummaryReady }) => {
                 </svg>
                 Browse Files
             </label>
+            {/* Error display */}
+            {error && (
+                <div style={{
+                    marginTop: '1rem',
+                    padding: '0.65rem 1rem',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.5rem',
+                    textAlign: 'left',
+                }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '1px' }}>
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span style={{ color: '#fca5a5', fontSize: '0.78rem', lineHeight: '1.5' }}>{error}</span>
+                </div>
+            )}
         </div>
     );
 };

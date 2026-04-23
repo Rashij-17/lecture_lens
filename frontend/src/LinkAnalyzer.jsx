@@ -32,6 +32,11 @@ const LinkAnalyzer = ({ onAnalysisComplete }) => {
       });
 
       if (!res.ok) {
+        // Handle 503 capacity errors with a friendly message
+        if (res.status === 503) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Google's AI servers are currently at max capacity. Please try again in a few minutes.");
+        }
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || `Request failed with status ${res.status}`);
       }

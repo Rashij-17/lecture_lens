@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pypdf import PdfReader
 import io
@@ -58,6 +59,32 @@ if not API_KEY:
 def get_client() -> genai.Client:
     """Create a fresh Gemini client for each request."""
     return genai.Client(api_key=API_KEY)
+
+
+# ── 503 / capacity helper ──────────────────────────────────────────────────
+_CAPACITY_MSG = (
+    "Google's AI servers are currently at max capacity. "
+    "Please try again in a few minutes."
+)
+
+
+def _is_503(exc: Exception) -> bool:
+    """Return True if the exception represents a Google 503 Service Unavailable."""
+    msg = str(exc).lower()
+    return (
+        "503" in msg
+        or "service unavailable" in msg
+        or "overloaded" in msg
+        or "resource_exhausted" in msg
+    )
+
+
+def _capacity_response() -> JSONResponse:
+    """Return a clean 503 JSON response for the frontend."""
+    return JSONResponse(
+        status_code=503,
+        content={"error": "capacity", "detail": _CAPACITY_MSG},
+    )
 
 
 # ── 1. Video Transcription endpoint ───────────────────
@@ -149,12 +176,17 @@ def _generate_summary(transcript: str) -> str:
         "transcript to help the student test their knowledge.)\n\n"
         f"Here is the transcript: {transcript}"
     )
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=_NO_THINK,
-    )
-    return response.text
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=_NO_THINK,
+        )
+        return response.text
+    except Exception as exc:
+        if _is_503(exc):
+            raise RuntimeError(_CAPACITY_MSG) from exc
+        raise
 
 
 @app.post("/api/analyze-link")
@@ -208,6 +240,13 @@ async def analyze_link(request: LinkAnalysisRequest):
                 summary = await loop.run_in_executor(
                     None, _generate_summary, full_transcript
                 )
+            except RuntimeError as e:
+                if _CAPACITY_MSG in str(e):
+                    # Propagate the friendly 503 message in the summary field
+                    summary = str(e)
+                else:
+                    logger.error(f"Summary generation failed: {e}")
+                    summary = f"Summary generation failed: {str(e)}"
             except Exception as e:
                 logger.error(f"Summary generation failed: {e}")
                 summary = f"Summary generation failed: {str(e)}"
@@ -264,15 +303,20 @@ def _generate_study_materials(transcript_text: str) -> dict:
     Transcript:
     {transcript_text}
     """
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-            response_mime_type="application/json",
-        ),
-    )
-    return json.loads(response.text)
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                response_mime_type="application/json",
+            ),
+        )
+        return json.loads(response.text)
+    except Exception as exc:
+        if _is_503(exc):
+            raise RuntimeError(_CAPACITY_MSG) from exc
+        raise
 
 
 @app.post("/api/study-materials")
@@ -286,6 +330,10 @@ async def create_study_materials(request: StudyMaterialRequest):
             None, _generate_study_materials, request.transcript_text
         )
         return materials
+    except RuntimeError as e:
+        if _CAPACITY_MSG in str(e):
+            return _capacity_response()
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -371,15 +419,20 @@ Formatting rules:
 
     # Agentic loop: keep calling until model stops requesting tool use
     while True:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-                system_instruction=system_instruction,
-                tools=[arxiv_tool],
-            ),
-        )
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    system_instruction=system_instruction,
+                    tools=[arxiv_tool],
+                ),
+            )
+        except Exception as exc:
+            if _is_503(exc):
+                raise RuntimeError(_CAPACITY_MSG) from exc
+            raise
 
         candidate = response.candidates[0]
         # Collect all parts of this turn
@@ -422,6 +475,11 @@ async def chat_with_lecture(request: ChatRequest):
             None, _generate_chat_response, request.transcript, request.question
         )
         return {"answer": answer}
+    except RuntimeError as e:
+        if _CAPACITY_MSG in str(e):
+            return _capacity_response()
+        logger.error(f"CHAT ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"CHAT ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -457,15 +515,25 @@ async def summarize_pdf(file: UploadFile = File(...)):
             Here is the text:
             {extracted_text}
             """
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config=_NO_THINK,
-            )
-            return response.text
+            try:
+                response = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=_NO_THINK,
+                )
+                return response.text
+            except Exception as exc:
+                if _is_503(exc):
+                    raise RuntimeError(_CAPACITY_MSG) from exc
+                raise
 
         loop = asyncio.get_event_loop()
-        summary_text = await loop.run_in_executor(None, _pdf_summary)
+        try:
+            summary_text = await loop.run_in_executor(None, _pdf_summary)
+        except RuntimeError as e:
+            if _CAPACITY_MSG in str(e):
+                return _capacity_response()
+            raise HTTPException(status_code=500, detail=str(e))
         return {"summary": summary_text}
 
     except HTTPException:
@@ -515,20 +583,30 @@ async def generate_quiz_endpoint(request: GenerateQuizRequest):
         Text content:
         {request.document_text}
         """
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-                response_mime_type="application/json",
-            ),
-        )
-        return json.loads(response.text)
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    response_mime_type="application/json",
+                ),
+            )
+            return json.loads(response.text)
+        except Exception as exc:
+            if _is_503(exc):
+                raise RuntimeError(_CAPACITY_MSG) from exc
+            raise
 
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(None, _gen_quiz)
         return result
+    except RuntimeError as e:
+        if _CAPACITY_MSG in str(e):
+            return _capacity_response()
+        logger.error(f"QUIZ GENERATION ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate active recall content")
     except Exception as e:
         logger.error(f"QUIZ GENERATION ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate active recall content")
@@ -626,15 +704,20 @@ IMPORTANT RULES:
 
         # Agentic loop
         while True:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                    system_instruction=system_instruction,
-                    tools=[arxiv_tool],
-                ),
-            )
+            try:
+                response = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                        system_instruction=system_instruction,
+                        tools=[arxiv_tool],
+                    ),
+                )
+            except Exception as exc:
+                if _is_503(exc):
+                    raise RuntimeError(_CAPACITY_MSG) from exc
+                raise
 
             candidate = response.candidates[0]
             assistant_parts = list(candidate.content.parts)
@@ -663,6 +746,11 @@ IMPORTANT RULES:
     try:
         answer = await loop.run_in_executor(None, _run_research)
         return {"answer": answer}
+    except RuntimeError as e:
+        if _CAPACITY_MSG in str(e):
+            return _capacity_response()
+        logger.error(f"RESEARCH AGENT ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"RESEARCH AGENT ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

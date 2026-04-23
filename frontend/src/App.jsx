@@ -119,6 +119,11 @@ function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: researchQuery }),
       });
+      if (res.status === 503) {
+        const errData = await res.json().catch(() => ({}));
+        setResearchError(errData.detail || "Google's AI servers are currently at max capacity. Please try again in a few minutes.");
+        return;
+      }
       if (!res.ok) throw new Error('Research request failed');
       const data = await res.json();
       setResearchResult(data.answer);
@@ -194,6 +199,11 @@ function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript_text: fullText }),
       });
+      if (res.status === 503) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`⚠️ ${errData.detail || "Google's AI servers are currently at max capacity. Please try again in a few minutes."}`);
+        return;
+      }
       if (!res.ok) throw new Error('Failed to generate study materials');
       const data = await res.json();
       setQuizData(data.quizzes);
@@ -232,6 +242,12 @@ function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: fullTranscript, question: userMessage }),
       });
+      if (res.status === 503) {
+        const errData = await res.json().catch(() => ({}));
+        const capacityMsg = errData.detail || "Google's AI servers are currently at max capacity. Please try again in a few minutes.";
+        setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **Server Busy** — ${capacityMsg}` }]);
+        return;
+      }
       if (!res.ok) throw new Error('Chat request failed');
       const data = await res.json();
       setChatHistory(prev => [...prev, { role: 'ai', text: data.answer }]);
