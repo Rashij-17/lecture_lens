@@ -92,4 +92,4 @@ Lecture Lens processes documents locally and communicates directly with the Gemi
 Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
 
 ---
-*Built with ❤️ and AI.*
+*Built with ❤️*
