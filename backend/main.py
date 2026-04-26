@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pypdf import PdfReader
 import io
+import re
 import shutil
 import os
 import glob
@@ -43,7 +44,7 @@ app = FastAPI(title="Lecture Lens API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,6 +60,20 @@ if not API_KEY:
 def get_client() -> genai.Client:
     """Create a fresh Gemini client for each request."""
     return genai.Client(api_key=API_KEY)
+
+
+# ── ANSI / yt-dlp error cleaner ───────────────────────────────────────────
+_ANSI_ESC = re.compile(r'\x1b\[[0-9;]*m')
+
+def _clean_error(exc: Exception) -> str:
+    """Strip ANSI escape codes and return a concise, user-friendly error string."""
+    raw = _ANSI_ESC.sub('', str(exc)).strip()
+    # yt-dlp errors look like: "ERROR: [youtube] <id>: Video unavailable"
+    # Extract just the part after "ERROR: " for a cleaner message.
+    match = re.search(r'ERROR:\s*(.+)', raw, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return raw
 
 
 # ── 503 / capacity helper ──────────────────────────────────────────────────
@@ -174,6 +189,15 @@ def _generate_summary(transcript: str) -> str:
         "## 3. Study Material & Flashcards\n"
         "(Generate 3-5 specific practice questions and answers based on the "
         "transcript to help the student test their knowledge.)\n\n"
+        "## 4. Concept Flowchart\n"
+        "Generate a concept map of the core topics using Mermaid.js syntax. "
+        "You MUST follow these strict syntax rules to prevent rendering errors:\n"
+        "1. Always start the block with exactly: `graph TD`\n"
+        "2. You MUST wrap ALL node text in double quotes to prevent syntax crashes. "
+        "Example: `A[\"Main Concept\"] --> B[\"Sub-Concept (Detail)\"]`\n"
+        "3. Do not use any markdown formatting (like bold) inside the node text.\n"
+        "4. Keep the labels concise.\n"
+        "Wrap the final code in a standard markdown block: ```mermaid [code] ```\n\n"
         f"Here is the transcript: {transcript}"
     )
     try:
@@ -209,9 +233,10 @@ async def analyze_link(request: LinkAnalysisRequest):
     except Exception as e:
         for leftover in glob.glob(os.path.join(_UPLOADS_DIR, f"{stem}.*")):
             _safe_remove(leftover)
+        clean_msg = _clean_error(e)
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to download audio from URL: {str(e)}"
+            detail=f"Could not download the video: {clean_msg}"
         )
 
     # Confirm the WAV was produced; fall back to any audio file with our stem
@@ -314,9 +339,10 @@ def _generate_study_materials(transcript_text: str) -> dict:
         )
         return json.loads(response.text)
     except Exception as exc:
-        if _is_503(exc):
-            raise RuntimeError(_CAPACITY_MSG) from exc
-        raise
+        err_msg = str(exc).lower()
+        if "503" in err_msg or "429" in err_msg or "quota" in err_msg or "exhausted" in err_msg:
+            return {"error": "AI is currently busy, please try again in a few seconds."}
+        return {"error": f"Failed to generate study materials: {str(exc)}"}
 
 
 @app.post("/api/study-materials")
@@ -329,13 +355,11 @@ async def create_study_materials(request: StudyMaterialRequest):
         materials = await loop.run_in_executor(
             None, _generate_study_materials, request.transcript_text
         )
+        if "error" in materials:
+            return JSONResponse(status_code=503, content={"error": materials["error"], "detail": materials["error"]})
         return materials
-    except RuntimeError as e:
-        if _CAPACITY_MSG in str(e):
-            return _capacity_response()
-        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(status_code=500, content={"error": str(e), "detail": str(e)})
 
 
 # ── 3. Universal Research Assistant (Gemini + ArXiv Function Calling) ──
@@ -430,9 +454,10 @@ Formatting rules:
                 ),
             )
         except Exception as exc:
-            if _is_503(exc):
-                raise RuntimeError(_CAPACITY_MSG) from exc
-            raise
+            err_msg = str(exc).lower()
+            if "503" in err_msg or "429" in err_msg or "quota" in err_msg or "exhausted" in err_msg:
+                return "error_capacity"
+            return "error_generic"
 
         candidate = response.candidates[0]
         # Collect all parts of this turn
@@ -474,15 +499,13 @@ async def chat_with_lecture(request: ChatRequest):
         answer = await loop.run_in_executor(
             None, _generate_chat_response, request.transcript, request.question
         )
+        if answer == "error_capacity":
+            return JSONResponse(status_code=503, content={"error": "AI is currently busy, please try again in a few seconds.", "detail": "AI is currently busy, please try again in a few seconds."})
+        if answer == "error_generic":
+            return JSONResponse(status_code=500, content={"error": "Chat failed due to an internal error.", "detail": "Chat failed due to an internal error."})
         return {"answer": answer}
-    except RuntimeError as e:
-        if _CAPACITY_MSG in str(e):
-            return _capacity_response()
-        logger.error(f"CHAT ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        logger.error(f"CHAT ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(status_code=500, content={"error": str(e), "detail": str(e)})
 
 
 # ── 4. PDF Summary endpoint ──────────────────────────────

@@ -2963,3 +2963,371 @@ mark {
 .link-no-summary-banner strong {
   color: #fde68a;
 }
+
+
+/* ═══════════════════════════════════════════════════
+   COMMUNITY LIBRARY — sub-nav, cards, skeletons
+   ═══════════════════════════════════════════════════ */
+
+/* ── Sub-nav ──────────────────────────────────────── */
+.lib-subnav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  margin-bottom: 1.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-pill);
+  width: fit-content;
+}
+
+.lib-subnav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text-dim);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
+  letter-spacing: 0.1px;
+}
+
+.lib-subnav-btn svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.lib-subnav-btn.active {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-main);
+}
+
+.lib-subnav-btn.active svg {
+  opacity: 1;
+}
+
+.lib-subnav-btn:not(.active):hover {
+  color: var(--text-secondary);
+}
+
+/* Live indicator dot */
+.lib-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  margin-left: 2px;
+  animation: subtlePulse 2s ease-in-out infinite;
+}
+
+/* ── Community Card Grid ──────────────────────────── */
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  width: 100%;
+  animation: fadeInUp 0.5s ease;
+}
+
+@media (max-width: 600px) {
+  .lib-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Individual Card ──────────────────────────────── */
+.lib-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base);
+}
+
+.lib-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Card header row */
+.lib-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Type badge */
+.lib-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1;
+}
+
+.lib-badge-link {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+.lib-badge-video {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.lib-badge-pdf {
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+/* Timestamp */
+.lib-card-time {
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Title */
+.lib-card-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+  /* Clamp to 2 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Topic chip */
+.lib-card-topic {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-pill);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  width: fit-content;
+}
+
+/* Summary text */
+.lib-card-summary {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.lib-card-no-summary {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Expand/collapse toggle */
+.lib-expand-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text-dim);
+  cursor: pointer;
+  margin-top: -0.15rem;
+  transition: color var(--transition-fast);
+  letter-spacing: 0.2px;
+}
+
+.lib-expand-btn:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Skeleton Loader ──────────────────────────────── */
+@keyframes skeletonShimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.lib-skeleton-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.lib-skeleton-line {
+  border-radius: 6px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 75%
+    );
+  background-size: 800px 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+}
+
+.lib-skeleton-title {
+  height: 14px;
+  width: 65%;
+}
+
+.lib-skeleton-sub {
+  height: 10px;
+  width: 35%;
+}
+
+.lib-skeleton-body {
+  height: 10px;
+  width: 90%;
+}
+
+.lib-skeleton-body--short {
+  width: 70%;
+}
+
+/* ── Empty State ──────────────────────────────────── */
+.lib-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.lib-empty-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.lib-empty-sub {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  max-width: 26rem;
+  line-height: 1.6;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   EXPORT PDF BUTTON
+   ═══════════════════════════════════════════════════ */
+
+.export-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-pill, 999px);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--accent, #10b981);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast, 0.12s ease),
+    border-color var(--transition-fast, 0.12s ease),
+    box-shadow var(--transition-base, 0.22s ease),
+    transform var(--transition-fast, 0.12s ease),
+    color var(--transition-fast, 0.12s ease);
+  letter-spacing: 0.2px;
+}
+
+.export-pdf-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.18);
+  transform: translateY(-1px);
+  color: #34d399;
+}
+
+.export-pdf-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  box-shadow: none;
+}
+
+.export-pdf-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-pdf-btn svg {
+  flex-shrink: 0;
+}
+
+/* ── Study Guide export action bar ─────────────────── */
+.study-export-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 0.75rem 0;
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
+  margin-bottom: 1.25rem;
+}
+
+/* ── PDF-summary header now uses flex row ─────────── */
+.pdf-summary-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-pill, 999px);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text-dim, #6b6b7b);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.12s ease);
+  white-space: nowrap;
+}
+
+.pdf-summary-clear-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-secondary);
+}

@@ -18,7 +18,7 @@ const VideoUploader = ({ onUploadSuccess }) => {
         formData.append('file', file);
 
         try {
-            const response = await fetch('http://localhost:8000/api/transcribe', {
+            const response = await fetch('/api/transcribe', {
                 method: 'POST',
                 body: formData,
             });

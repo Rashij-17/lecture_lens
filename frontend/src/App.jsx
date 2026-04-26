@@ -6,11 +6,29 @@ import VideoPlayer from './VideoPlayer';
 import PdfUploader from './PdfUploader';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import MermaidRenderer from './MermaidRenderer';
 import ExploreLibrary from './components/ExploreLibrary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { usePdfExport } from './hooks/usePdfExport';
+
+// Shared ReactMarkdown component map — renders mermaid fences as live SVG charts
+const mdComponents = {
+  code({ node, inline, className, children, ...props }) {
+    const language = (className || '').replace('language-', '');
+    if (!inline && language === 'mermaid') {
+      const chartString = Array.isArray(children) ? children.join('') : String(children);
+      return <MermaidRenderer chart={chartString.trim()} />;
+    }
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
+  },
+};
 
 function AppContent() {
   const { currentUser } = useAuth();
@@ -25,6 +43,7 @@ function AppContent() {
 
 function Dashboard() {
   const { currentUser, logout } = useAuth();
+  const { exportToPdf, isExporting } = usePdfExport();
   const [activeTab, setActiveTab] = useState('workspace');
   const [transcriptionData, setTranscriptionData] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -106,6 +125,23 @@ function Dashboard() {
     }
   };
 
+  // ─── Save a summary to the global public library ───
+  const saveToPublicLibrary = async ({ title, topic, summary, type }) => {
+    if (!title && !topic) return;
+    try {
+      await addDoc(collection(db, 'public_library'), {
+        title: title || topic || 'Untitled',
+        topic: topic || title || 'General',
+        summary: summary ? summary.slice(0, 800) : '',
+        type,           // 'video' | 'link' | 'pdf'
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      // Non-fatal — don't surface this error to the user
+      console.warn('Could not save to public library:', err);
+    }
+  };
+
   // ─── Research Agent handler ───
   const handleResearchSearch = async () => {
     if (!researchQuery.trim()) return;
@@ -114,7 +150,7 @@ function Dashboard() {
     setResearchError('');
 
     try {
-      const res = await fetch('http://localhost:8000/api/research', {
+      const res = await fetch('/api/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: researchQuery }),
@@ -159,6 +195,8 @@ function Dashboard() {
     // Save the filename as a study topic
     const topicName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
     saveStudyTopic(topicName, 'video');
+    // Publish to global library (no summary available for raw video uploads)
+    saveToPublicLibrary({ title: topicName, topic: topicName, summary: '', type: 'video' });
   };
 
   // ─── Link Analysis complete handler ───
@@ -181,6 +219,13 @@ function Dashboard() {
     // Save to Firestore history
     const topicName = data.title || sourceUrl;
     saveStudyTopic(topicName, 'link');
+    // Publish to global community library
+    saveToPublicLibrary({
+      title: data.title || sourceUrl,
+      topic: data.title || 'Link Analysis',
+      summary: data.summary || '',
+      type: 'link',
+    });
   };
 
   const handleJumpToTime = (startTime) => {
@@ -194,7 +239,7 @@ function Dashboard() {
     const fullText = transcriptionData.segments.map(s => s.text).join(' ');
 
     try {
-      const res = await fetch('http://localhost:8000/api/study-materials', {
+      const res = await fetch('/api/study-materials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript_text: fullText }),
@@ -237,7 +282,7 @@ function Dashboard() {
     const fullTranscript = transcriptionData.segments.map(s => s.text).join(' ');
 
     try {
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: fullTranscript, question: userMessage }),
@@ -327,12 +372,19 @@ function Dashboard() {
             <PdfUploader onSummaryReady={(summaryData) => {
               setPdfSummary(summaryData);
               saveStudyTopic('PDF Analysis', 'pdf');
+              // Publish to global community library
+              saveToPublicLibrary({
+                title: 'PDF Analysis',
+                topic: 'PDF Analysis',
+                summary: summaryData || '',
+                type: 'pdf',
+              });
             }} />
           </div>
 
           {/* 3. Summary Box (spans full width) */}
           {pdfSummary && (
-            <div className="pdf-summary-box">
+            <div className="pdf-summary-box" id="pdf-summary-export">
               <div className="pdf-summary-header">
                 <h3 className="pdf-summary-title">
                   <svg className="pdf-summary-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,16 +392,35 @@ function Dashboard() {
                   </svg>
                   AI Summary
                 </h3>
-                <button
-                  onClick={() => setPdfSummary(null)}
-                  className="pdf-summary-clear-btn"
-                >
-                  Clear
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    className="export-pdf-btn"
+                    onClick={() => exportToPdf('pdf-summary-export', 'pdf-ai-summary')}
+                    disabled={isExporting}
+                    title="Export as PDF"
+                  >
+                    {isExporting ? (
+                      <span className="btn-spinner" />
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    )}
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={() => setPdfSummary(null)}
+                    className="pdf-summary-clear-btn"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
 
               <div className="markdown-summary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                   {pdfSummary}
                 </ReactMarkdown>
               </div>
@@ -415,7 +486,7 @@ function Dashboard() {
 
             {/* Results */}
             {researchResult && (
-              <div className="research-results">
+              <div className="research-results" id="research-results-export">
                 <div className="research-results-header">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
@@ -425,9 +496,27 @@ function Dashboard() {
                     <polyline points="10 9 9 9 8 9" />
                   </svg>
                   Research Results
+                  <button
+                    className="export-pdf-btn"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => exportToPdf('research-results-export', 'research-results')}
+                    disabled={isExporting}
+                    title="Export as PDF"
+                  >
+                    {isExporting ? (
+                      <span className="btn-spinner" />
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    )}
+                    Export PDF
+                  </button>
                 </div>
                 <div className="research-results-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                     {researchResult}
                   </ReactMarkdown>
                 </div>
@@ -498,17 +587,36 @@ function Dashboard() {
         <>
           {/* ─── Link AI Summary Banner ─── */}
           {linkSummary && (
-            <div className="link-summary-banner" id="link-summary-banner">
+            <div className="link-summary-banner" id="link-summary-export">
               <div className="link-summary-banner-header">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
                   <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                 </svg>
                 <span className="link-summary-banner-title">✨ {linkTitle || 'AI Summary'}</span>
-                <button className="link-summary-close-btn" onClick={() => setLinkSummary(null)}>Dismiss</button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
+                  <button
+                    className="export-pdf-btn"
+                    onClick={() => exportToPdf('link-summary-export', linkTitle ? `${linkTitle}-summary` : 'link-summary')}
+                    disabled={isExporting}
+                    title="Export as PDF"
+                  >
+                    {isExporting ? (
+                      <span className="btn-spinner" />
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    )}
+                    Export PDF
+                  </button>
+                  <button className="link-summary-close-btn" onClick={() => setLinkSummary(null)}>Dismiss</button>
+                </div>
               </div>
               <div className="markdown-summary">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{linkSummary}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{linkSummary}</ReactMarkdown>
               </div>
             </div>
           )}
@@ -611,7 +719,27 @@ function Dashboard() {
 
               {/* 4. Study Materials Section */}
               {(quizData || flashcardData) && (
-                <div className="study-section">
+                <div className="study-section" id="study-section-export">
+                  {/* Export Study Guide as PDF */}
+                  <div className="study-export-bar">
+                    <button
+                      className="export-pdf-btn"
+                      onClick={() => exportToPdf('study-section-export', 'study-guide')}
+                      disabled={isExporting}
+                      title="Export full study guide as PDF"
+                    >
+                      {isExporting ? (
+                        <span className="btn-spinner" />
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      )}
+                      Export Study Guide as PDF
+                    </button>
+                  </div>
 
                   {/* Quizzes */}
                   {quizData && quizData.length > 0 && (
@@ -744,7 +872,7 @@ function Dashboard() {
                     <div className={`chat-bubble ${msg.role}`}>
                       {msg.role === 'ai' ? (
                         <div className="chat-markdown">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                             {msg.text}
                           </ReactMarkdown>
                         </div>

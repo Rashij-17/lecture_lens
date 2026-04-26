@@ -17,7 +17,7 @@ const PdfUploader = ({ onSummaryReady }) => {
         formData.append('file', file);
 
         try {
-            const response = await fetch('http://localhost:8000/api/pdf-summary', {
+            const response = await fetch('/api/pdf-summary', {
                 method: 'POST',
                 body: formData,
             });
