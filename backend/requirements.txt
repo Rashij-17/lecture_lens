@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pypdf
+yt-dlp
+openai-whisper
+google-genai
+arxiv
+python-multipart
+python-dotenv
