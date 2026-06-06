@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import LandingSplash from './components/LandingSplash';
 import './App.css';
 import VideoUploader from './VideoUploader';
 import LinkAnalyzer from './LinkAnalyzer';
@@ -32,6 +33,12 @@ const mdComponents = {
 
 function AppContent() {
   const { currentUser } = useAuth();
+  const [splashDone, setSplashDone] = useState(false);
+
+  // ─── Show landing video splash first ───
+  if (!splashDone) {
+    return <LandingSplash onFinished={() => setSplashDone(true)} />;
+  }
 
   // ─── If not authenticated, show Login only ───
   if (!currentUser) {
