@@ -70,7 +70,7 @@ export default function Login() {
       width: '600px',
       height: '600px',
       borderRadius: '50%',
-      background: 'radial-gradient(circle, rgba(156,174,150,0.12) 0%, transparent 70%)',
+      background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)',
       top: '-200px',
       left: '-150px',
       filter: 'blur(80px)',
@@ -81,7 +81,7 @@ export default function Login() {
       width: '500px',
       height: '500px',
       borderRadius: '50%',
-      background: 'radial-gradient(circle, rgba(156,174,150,0.08) 0%, transparent 70%)',
+      background: 'radial-gradient(circle, rgba(52,211,153,0.08) 0%, transparent 70%)',
       bottom: '-180px',
       right: '-120px',
       filter: 'blur(80px)',
@@ -99,7 +99,7 @@ export default function Login() {
       WebkitBackdropFilter: 'blur(24px)',
       border: '1px solid rgba(255,255,255,0.08)',
       borderRadius: '20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 80px rgba(156,174,150,0.06)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 80px rgba(16, 185, 129, 0.06)',
       animation: 'loginFadeIn 0.6s ease',
     },
     logoArea: {
@@ -107,15 +107,16 @@ export default function Login() {
       marginBottom: '2rem',
     },
     logoIcon: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '14px',
-      background: 'linear-gradient(135deg, #9CAE96, #7a947a)',
+      width: '64px',
+      height: '64px',
+      borderRadius: '16px',
+      background: 'rgba(16, 185, 129, 0.08)',
+      border: '1px solid rgba(16, 185, 129, 0.25)',
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: '1rem',
-      boxShadow: '0 0 30px rgba(156,174,150,0.25)',
+      boxShadow: '0 0 30px rgba(16, 185, 129, 0.15)',
     },
     title: {
       fontSize: '1.6rem',
@@ -160,8 +161,8 @@ export default function Login() {
     button: {
       width: '100%',
       padding: '0.8rem 1.5rem',
-      background: '#9CAE96',
-      color: '#000',
+      background: 'linear-gradient(135deg, #10b981, #34d399)',
+      color: '#ffffff',
       border: 'none',
       borderRadius: '10px',
       fontSize: '0.9rem',
@@ -169,7 +170,7 @@ export default function Login() {
       fontFamily: "'Inter', system-ui, sans-serif",
       cursor: 'pointer',
       transition: 'transform 0.15s ease, box-shadow 0.25s ease, filter 0.25s ease',
-      boxShadow: '0 4px 20px rgba(156,174,150,0.3)',
+      boxShadow: '0 4px 20px rgba(16, 185, 129, 0.3)',
       letterSpacing: '0.3px',
       display: 'flex',
       alignItems: 'center',
@@ -198,7 +199,7 @@ export default function Login() {
       color: '#71717a',
     },
     toggleLink: {
-      color: '#9CAE96',
+      color: '#10b981',
       background: 'none',
       border: 'none',
       cursor: 'pointer',
@@ -212,8 +213,8 @@ export default function Login() {
     spinner: {
       width: '16px',
       height: '16px',
-      border: '2px solid rgba(0,0,0,0.2)',
-      borderTopColor: '#000',
+      border: '2px solid rgba(255,255,255,0.25)',
+      borderTopColor: '#fff',
       borderRadius: '50%',
       animation: 'loginSpin 0.6s linear infinite',
     },
@@ -249,19 +250,19 @@ export default function Login() {
           to { transform: rotate(360deg); }
         }
         .login-input:focus {
-          border-color: #9CAE96 !important;
-          box-shadow: 0 0 0 3px rgba(156,174,150,0.15), 0 0 20px rgba(156,174,150,0.08) !important;
+          border-color: #10b981 !important;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15), 0 0 20px rgba(16, 185, 129, 0.08) !important;
         }
         .login-btn:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 8px 40px rgba(156,174,150,0.4);
+          box-shadow: 0 8px 40px rgba(16, 185, 129, 0.4);
           filter: brightness(1.1);
         }
         .login-btn:active:not(:disabled) {
           transform: translateY(0) scale(0.97);
         }
         .login-toggle-link:hover {
-          color: #b5c7af !important;
+          color: #34d399 !important;
         }
       `}</style>
 
@@ -275,10 +276,29 @@ export default function Login() {
           {/* Logo / Branding */}
           <div style={styles.logoArea}>
             <div style={styles.logoIcon}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 16v-4" />
-                <path d="M12 8h.01" />
+              <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                <defs>
+                  <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#34d399" />
+                  </linearGradient>
+                  <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#34d399" stopOpacity="0.05" />
+                  </linearGradient>
+                </defs>
+                <path d="M 22 14 L 14 14 L 14 22" stroke="url(#accentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+                <path d="M 78 14 L 86 14 L 86 22" stroke="url(#accentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+                <path d="M 22 86 L 14 86 L 14 78" stroke="url(#accentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+                <path d="M 78 86 L 86 86 L 86 78" stroke="url(#accentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+                <circle cx="50" cy="50" r="38" stroke="url(#accentGrad)" strokeWidth="1.5" fill="none" opacity="0.3" strokeDasharray="4 8"/>
+                <circle cx="50" cy="50" r="33" stroke="url(#accentGrad)" strokeWidth="2" fill="none" />
+                <polygon points="50,28 68,35 50,42 32,35" fill="url(#accentGrad)" />
+                <path d="M 68 35 L 72 41 L 72 47" stroke="url(#accentGrad)" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                <circle cx="72" cy="49" r="1.5" fill="url(#accentGrad)" />
+                <path d="M 50 45 C 45 42, 38 42, 34 44 L 34 56 C 38 54, 45 54, 50 57 C 55 54, 62 54, 66 56 L 66 44 C 62 42, 55 42, 50 45 Z" fill="url(#glowGrad)" stroke="url(#accentGrad)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                <path d="M 39 49 C 42 48, 45 48, 47 49" stroke="url(#accentGrad)" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.8"/>
+                <path d="M 61 49 C 58 48, 55 48, 53 49" stroke="url(#accentGrad)" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.8"/>
               </svg>
             </div>
             <h1 style={styles.title}>Lecture Lens</h1>

@@ -315,6 +315,36 @@ function Dashboard() {
     <div className="app-container">
       {/* ─── Header ─── */}
       <div className="app-header">
+        <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'center', filter: 'drop-shadow(0 0 20px rgba(16, 185, 129, 0.15))' }}>
+          <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+            <defs>
+              <linearGradient id="headerAccentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#10b981" />
+                <stop offset="100%" stopColor="#34d399" />
+              </linearGradient>
+              <linearGradient id="headerGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#34d399" stopOpacity="0.05" />
+              </linearGradient>
+              <filter id="headerGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+            <path d="M 22 14 L 14 14 L 14 22" stroke="url(#headerAccentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+            <path d="M 78 14 L 86 14 L 86 22" stroke="url(#headerAccentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+            <path d="M 22 86 L 14 86 L 14 78" stroke="url(#headerAccentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+            <path d="M 78 86 L 86 86 L 86 78" stroke="url(#headerAccentGrad)" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85"/>
+            <circle cx="50" cy="50" r="38" stroke="url(#headerAccentGrad)" strokeWidth="1.5" fill="none" opacity="0.3" strokeDasharray="4 8"/>
+            <circle cx="50" cy="50" r="33" stroke="url(#headerAccentGrad)" strokeWidth="2" fill="none" filter="url(#headerGlow)" />
+            <polygon points="50,28 68,35 50,42 32,35" fill="url(#headerAccentGrad)" filter="url(#headerGlow)" />
+            <path d="M 68 35 L 72 41 L 72 47" stroke="url(#headerAccentGrad)" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            <circle cx="72" cy="49" r="1.5" fill="url(#headerAccentGrad)" />
+            <path d="M 50 45 C 45 42, 38 42, 34 44 L 34 56 C 38 54, 45 54, 50 57 C 55 54, 62 54, 66 56 L 66 44 C 62 42, 55 42, 50 45 Z" fill="url(#headerGlowGrad)" stroke="url(#headerAccentGrad)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" filter="url(#headerGlow)" />
+            <path d="M 39 49 C 42 48, 45 48, 47 49" stroke="url(#headerAccentGrad)" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.8"/>
+            <path d="M 61 49 C 58 48, 55 48, 53 49" stroke="url(#headerAccentGrad)" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.8"/>
+          </svg>
+        </div>
         <h1 className="title">Lecture Lens</h1>
         <p className="subtitle">AI-Powered Video Transcription & Study Tools</p>
         <button
